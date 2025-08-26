@@ -1,15 +1,15 @@
 #include "Monster.h"
 
 // Global instances
-FourWheelMotor motors;
-MonsterSensor sensors;
+//FourWheelMotor motors;
+//MonsterSensor sensors;
 //MonsterController controller;
 //MonsterDiagnosis diagnosis;
 
 namespace MonsterCore {
 FourWheelMotor    motors;
 MonsterSensor     sensors;
-//MonsterController controller;
+MonsterController controller;
 //MonsterDiagnosis  diagnosis;
 
 void begin(const char* model_name) {
@@ -18,14 +18,17 @@ void begin(const char* model_name) {
   motors.begin();
   motors.configureAll();
 
-  //sensors.init();
-  //controller.init(MAX_LINEAR_VELOCITY, MAX_ANGULAR_VELOCITY);
+  sensors.begin();
+  controller.init(MAX_LINEAR_VELOCITY, MAX_ANGULAR_VELOCITY);
+  controller.attachMotor(&motors);
   //diagnosis.init();
 }
 
 void run() {
   // Update sensors
-  //sensors.updateIMU();
+  sensors.update();
+
+  controller.update();
 
   // Example: LED heartbeat
   //diagnosis.showLedStatus(true);

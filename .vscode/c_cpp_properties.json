@@ -4,8 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/home/farid/Arduino/libraries/**",
-                "/home/farid/.arduino15/packages/**"
+                "/home/farid/Arduino/**",
+                "/home/farid/.arduino15/**"
             ],
             "defines": [],
             "cStandard": "c17",

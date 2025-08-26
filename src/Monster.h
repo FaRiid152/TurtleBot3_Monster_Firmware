@@ -5,13 +5,13 @@
 #include "../include/monster_motor.h"
 #include "../include/monster_sensor.h"
 #include "../include/monster_controller.h"
-//#include "../include/monster_diagnosis.h"
+#include "../include/monster_diagnosis.h"
 
 namespace MonsterCore {
   extern FourWheelMotor    motors;
   extern MonsterSensor     sensors;
   extern MonsterController controller;
-  //extern MonsterDiagnosis  diagnosis;
+  extern MonsterDiagnosis  diagnosis;
   
   void begin(const char* model_name = "Monster");
   void run();

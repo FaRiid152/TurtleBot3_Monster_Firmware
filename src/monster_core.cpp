@@ -10,7 +10,7 @@ namespace MonsterCore {
 FourWheelMotor    motors;
 MonsterSensor     sensors;
 MonsterController controller;
-//MonsterDiagnosis  diagnosis;
+MonsterDiagnosis  diagnosis;
 
 void begin(const char* model_name) {
   (void)model_name; // not used yet, but can log
@@ -19,9 +19,13 @@ void begin(const char* model_name) {
   motors.configureAll();
 
   sensors.begin();
+  
   controller.init(MAX_LINEAR_VELOCITY, MAX_ANGULAR_VELOCITY);
   controller.attachMotor(&motors);
-  //diagnosis.init();
+  
+  diagnosis.init();
+  diagnosis.setMode(MonsterDiagnosis::Mode::HEARTBEAT);
+
 }
 
 void run() {
@@ -31,7 +35,7 @@ void run() {
   controller.update();
 
   // Example: LED heartbeat
-  //diagnosis.showLedStatus(true);
+  diagnosis.tick();
 }
 
 } // namespace MonsterCore

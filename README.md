@@ -49,11 +49,17 @@ The firmware provides both a **standalone (plain)** mode and a **ROS 2 integrate
 ## Repository Structure
 
 Monster.h # High-level interface
+
 monster_core.cpp # Bring-up, main loop, Plain/ROS2 integration
+
 monster_config.h # Geometry, motor IDs, velocity limits, conversions
-monster_controller.* # Motion controller (maps v,w -> wheel speeds)
+
+monster_controller.* # Motion controller (maps v,w -> wheel speeds
+
 monster_motor.* # Dynamixel driver for 4 motors
+
 monster_sensor.* # IMU, sonar, battery, LEDs, button
+
 monster_diagnosis.* # LED heartbeat and error codes
 
 ---

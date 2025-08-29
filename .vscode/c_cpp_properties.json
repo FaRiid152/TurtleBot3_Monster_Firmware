@@ -5,7 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/home/farid/Arduino/**",
-                "/home/farid/.arduino15/**"
+                "/home/farid/.arduino15/**",
+                "/home/farid/Arduino/libraries/micro_ros_arduino/src/**"
             ],
             "defines": [],
             "cStandard": "c17",

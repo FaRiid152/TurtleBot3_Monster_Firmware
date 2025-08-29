@@ -4,12 +4,17 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/home/farid/Arduino/**",
-                "/home/farid/.arduino15/**",
-                "/home/farid/Arduino/libraries/micro_ros_arduino/src/**"
+                "${env:HOME}/Arduino/**",
+                "${env:HOME}/.arduino15/**",
+                "${env:HOME}/Arduino/libraries/micro_ros_arduino/src/**",
+                "${env:HOME}/.arduino15/packages/OpenCR/hardware/OpenCR/1.5.3/cores/arduino",
+                "${env:HOME}/.arduino15/packages/OpenCR/hardware/OpenCR/1.5.3/variants/OpenCR",
+                "${env:HOME}/.arduino15/packages/OpenCR/hardware/OpenCR/1.5.3/libraries/**",
+                "${env:HOME}/.arduino15/packages/OpenCR/tools/arm-none-eabi-gcc/**/arm-none-eabi/include"
             ],
             "defines": [],
             "cStandard": "c17",
+            "cppStandard": "c++17",
             "intelliSenseMode": "linux-clang-x64"
         }
     ],

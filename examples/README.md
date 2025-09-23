@@ -20,6 +20,10 @@ This folder contains minimal sketches to test and verify the **sanity** of each 
 - **controller_demo**  
   Validates the differential-drive controller. Issues linear + angular velocity goals and applies them to motors.
 
+- **IMU Publisher Demo
+
+  shows how to publish raw IMU data from the Monster robot to ROS 2.
+
 ## Notes
 - Ensure robot is on a stand when testing motor code to prevent runaway.  
 - For sonar demo, place an object ~20–50 cm in front and check reported distance.  

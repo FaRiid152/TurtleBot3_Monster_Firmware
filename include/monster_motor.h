@@ -17,9 +17,9 @@
   #endif
 #endif
 
-class FourWheelMotor {
+class monster_motor {
 public:
-  FourWheelMotor();
+  monster_motor();
 
   // Bring up workbench at DXL_BAUD (from monster_config.h)
   void begin();
@@ -29,6 +29,10 @@ public:
 
   // Command left/right side linear speeds (m/s)
   void commandSides(float v_left_mps, float v_right_mps);
+
+  // Feedback (XL430 Present_Position/Velocity). Returns false if any read fails.
+  bool readPositions(int32_t out_pos[4]);    // order: L1,L2,R1,R2 (signed ticks)
+  bool readVelocities(int32_t out_vel[4]);   // order: L1,L2,R1,R2 (goal units)
 
   // Optional: expose workbench if you need debugging
   DynamixelWorkbench& wb() { return dxl_wb; }

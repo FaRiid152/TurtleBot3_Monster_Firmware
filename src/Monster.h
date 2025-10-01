@@ -1,6 +1,8 @@
 #ifndef MONSTER_H_
 #define MONSTER_H_
 
+#include "../include/monster_config.h"
+
 #include "../include/monster_motor.h"
 #include "../include/monster_sensor.h"
 #include "../include/monster_controller.h"
@@ -9,10 +11,10 @@
 namespace MonsterCore {
 
   // Shared singletons
-  extern FourWheelMotor    motors;
-  extern MonsterSensor     sensors;
-  extern MonsterController controller;
-  extern MonsterDiagnosis  diagnosis;
+  extern monster_motor   motors;
+  extern monster_sensor    sensors;
+  extern monster_controller controller;
+  extern monster_diagnosis diagnosis;
 
   // ---------------- Plain (no ROS) ----------------
   // Bring-up and periodic loop

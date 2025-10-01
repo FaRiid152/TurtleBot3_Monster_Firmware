@@ -1,7 +1,7 @@
 #include "../include/monster_controller.h"
 #include "../include/monster_motor.h"   // <-- include the real motor header here
 
-bool MonsterController::init(float max_lin_vel, float max_ang_vel) {
+bool monster_controller::init(float max_lin_vel, float max_ang_vel) {
   max_lin_ = max_lin_vel;
   max_ang_ = max_ang_vel;
   v_goal_  = 0.0f;
@@ -9,12 +9,12 @@ bool MonsterController::init(float max_lin_vel, float max_ang_vel) {
   return true;
 }
 
-void MonsterController::setGoal(float linear_mps, float angular_rps) {
+void monster_controller::setGoal(float linear_mps, float angular_rps) {
   v_goal_ = clamp(linear_mps, -max_lin_, max_lin_);
   w_goal_ = clamp(angular_rps, -max_ang_, max_ang_);
 }
 
-bool MonsterController::update() {
+bool monster_controller::update() {
   if (!motor_) return false;
 
   // Differential drive kinematics:
@@ -32,7 +32,7 @@ bool MonsterController::update() {
   return true;
 }
 
-void MonsterController::getRCdata(float* cmd_vel) {
+void monster_controller::getRCdata(float* cmd_vel) {
   cmd_vel[0] = v_goal_;
   cmd_vel[1] = w_goal_;
 }

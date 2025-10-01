@@ -10,10 +10,10 @@
 namespace MonsterCore {
 
 // ---- Instances ----
-FourWheelMotor    motors;
-MonsterSensor     sensors;
-MonsterController controller;
-MonsterDiagnosis  diagnosis;
+monster_motor    motors;
+monster_sensor     sensors;
+monster_controller controller;
+monster_diagnosis  diagnosis;
 
 // -------------------- PLAIN MODE --------------------
 static uint32_t plain_next_us = 0;
@@ -28,7 +28,7 @@ void beginPlain(const char* model_name) {
   controller.attachMotor(&motors);
 
   diagnosis.init();
-  diagnosis.setMode(MonsterDiagnosis::Mode::HEARTBEAT);
+  diagnosis.setMode(monster_diagnosis::Mode::HEARTBEAT);
 
   plain_next_us = micros();
 }
@@ -72,9 +72,12 @@ static void apply_safety_and_drive() {
 
   bool timed_out     = (millis() - g_last_cmd_ms) > CMD_TIMEOUT_MS;
   float vbatt        = sensors.batteryVoltage();
-  float sonar_m      = sensors.sonarMeters();
   bool low_batt_hold = (vbatt > 0.1f && vbatt < LOW_BATT_V);
-  bool obstacle_hold = (sonar_m > 0.0f && sonar_m < SONAR_STOP_M);
+  bool obstacle_hold = false;
+  #if MONSTER_EXT_SENSORS
+    const float sonar_m = sensors.sonarMeters();
+    obstacle_hold = (sonar_m > 0.0f && sonar_m < SONAR_STOP_M); 
+  #endif
 
   float v = (timed_out || low_batt_hold) ? 0.0f : g_v_cmd;
   float w = (timed_out || low_batt_hold) ? 0.0f : g_w_cmd;
@@ -107,7 +110,7 @@ void beginROS2(const char* model_name) {
   controller.init(MAX_LINEAR_VELOCITY, MAX_ANGULAR_VELOCITY);
   controller.attachMotor(&motors);
   diagnosis.init();
-  diagnosis.setMode(MonsterDiagnosis::Mode::HEARTBEAT);
+  diagnosis.setMode(monster_diagnosis::Mode::HEARTBEAT);
 
   delay(150);
 

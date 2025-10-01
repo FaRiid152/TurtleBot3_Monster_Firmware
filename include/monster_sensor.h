@@ -1,20 +1,27 @@
 #ifndef MONSTER_SENSOR_H
 #define MONSTER_SENSOR_H
 
+#include "monster_config.h"
+#include "monster_motor.h"
 #include <Arduino.h>
 #include <IMU.h>     // OpenCR IMU (cIMU)
-#include "OLLO.h"    // OLLO sensors (touch/IR)
+#if MONSTER_EXT_SENSORS
+  #include "OLLO.h"  // OLLO sensors (touch/IR)
+#endif  
 
 //=================== Compatibility / Fallbacks ===================//
 
-#ifndef BDPIN_GPIO_1
+//
+#if MONSTER_EXT_SENSORS
+  #ifndef BDPIN_GPIO_1
   // Sonar default pins (HC-SR04 style): Trig=D8, Echo=D9
-  #define MONSTER_SONAR_TRIG_PIN  8
-  #define MONSTER_SONAR_ECHO_PIN  9
-#else
-  // OpenCR default (same as TurtleBot3)
-  #define MONSTER_SONAR_TRIG_PIN  BDPIN_GPIO_1
-  #define MONSTER_SONAR_ECHO_PIN  BDPIN_GPIO_2
+    #define MONSTER_SONAR_TRIG_PIN  8
+    #define MONSTER_SONAR_ECHO_PIN  9
+  #else
+  // OpenCR default 
+    #define MONSTER_SONAR_TRIG_PIN  BDPIN_GPIO_1
+    #define MONSTER_SONAR_ECHO_PIN  BDPIN_GPIO_2
+  #endif
 #endif
 
 #ifndef BDPIN_GPIO_4
@@ -79,16 +86,34 @@ struct MonsterLedPins {
   int back_right;
 };
 
-struct MonsterSonarPins {
-  int trig;
-  int echo;
-};
+#if MONSTER_EXT_SENSORS
+  struct MonsterSonarPins {
+    int trig;
+    int echo;
+  };
+#endif
 
-class MonsterSensor {
+class monster_sensor {
 public:
-  MonsterSensor();
+  monster_sensor();
   bool begin();
   void update();
+
+  // ---- ODOMETRY ----
+  void resetOdometry(float x=0.0f, float y=0.0f, float theta=0.0f);
+  void updateOdometry();
+
+  // Pose getters (meters, radians)
+  float odomX()     const { return odom_x_; }
+  float odomY()     const { return odom_y_; }
+  float odomTheta() const { return odom_th_; }
+
+  // Wheel feedback (radians, rad/s). Index order: 0=L1,1=L2,2=R1,3=R2
+  float wheelPosRad(uint8_t i) const { return (i<4) ? wheel_pos_rad_[i] : 0.0f; }
+  float wheelVelRad(uint8_t i) const { return (i<4) ? wheel_vel_rad_[i] : 0.0f; }
+
+  // existing API continues...
+  bool imuOk() const { return imu_ok_; }
 
   // IMU
   void calibrateGyro();
@@ -109,22 +134,54 @@ public:
   void setLedPattern(double v_linear, double v_angular);
 
 private:
-  void initBumper();
-  void initIR();
-  void initSonar();
+  #if MONSTER_EXT_SENSORS
+    void initBumper();
+    void initIR();
+    void initSonar();
+  #endif
   void initLEDs();
 
   void updateIMU();
-  void updateSonar(uint32_t now_ms);
-
+  #if MONSTER_EXT_SENSORS
+    void updateSonar(uint32_t now_ms);
+  #endif
+  
 private:
   cIMU imu_;
-  OLLO ollo_;
+  #if MONSTER_EXT_SENSORS
+    OLLO ollo_;
+  #endif
   bool imu_ok_ = false;
 
+  // ---- ODOMETRY STATE ----
+  // raw encoder last-read (XL430 Present_Position, signed int32)
+  int32_t enc_prev_[4] = {0,0,0,0};
+  bool    enc_have_prev_ = false;
+
+  // continuous wheel angle and angular velocity
+  float wheel_pos_rad_[4] = {0,0,0,0};
+  float wheel_vel_rad_[4] = {0,0,0,0};
+
+  // robot pose in odom frame
+  float odom_x_ = 0.0f, odom_y_ = 0.0f, odom_th_ = 0.0f;
+
+  // timing for velocity calc
+  uint32_t last_odom_us_ = 0;
+
+  // helpers
+  static inline float normalizeAngle(float a) {
+    while (a >  M_PI) a -= 2.0f*M_PI;
+    while (a < -M_PI) a += 2.0f*M_PI;
+    return a;
+  }
+
+
   MonsterLedPins   led_{};
-  MonsterSonarPins sonar_{};
-  float sonar_store_ = 0.0f;
+
+  #if MONSTER_EXT_SENSORS
+    MonsterSonarPins sonar_{};
+    float sonar_store_ = 0.0f;
+  #endif
 
   float quat_[4]  = {0,0,0,1};
   float gyro_[3]  = {0,0,0};

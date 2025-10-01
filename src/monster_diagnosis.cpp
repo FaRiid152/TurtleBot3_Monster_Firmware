@@ -1,11 +1,11 @@
 #include "../include/monster_diagnosis.h"
 
-bool MonsterDiagnosis::init() {
+bool monster_diagnosis::init() {
   MonsterDiagConfig def;        // default settings
   return init(def);
 }
 
-bool MonsterDiagnosis::init(const MonsterDiagConfig& cfg) {
+bool monster_diagnosis::init(const MonsterDiagConfig& cfg) {
   cfg_ = cfg;
   pinMode(cfg_.led_pin, OUTPUT);
   led_state_ = false;
@@ -19,7 +19,7 @@ bool MonsterDiagnosis::init(const MonsterDiagConfig& cfg) {
   return true;
 }
 
-void MonsterDiagnosis::setMode(Mode m) {
+void monster_diagnosis::setMode(Mode m) {
   mode_ = m;
   if (mode_ == Mode::ON)  setLed(true);
   if (mode_ == Mode::OFF) setLed(false);
@@ -32,11 +32,11 @@ void MonsterDiagnosis::setMode(Mode m) {
   if (mode_ != Mode::ERROR_CODE) err_code_ = 0;
 }
 
-void MonsterDiagnosis::setHeartbeat(uint16_t period_ms) {
+void monster_diagnosis::setHeartbeat(uint16_t period_ms) {
   cfg_.heartbeat_ms = period_ms;
 }
 
-void MonsterDiagnosis::flashError(uint8_t code) {
+void monster_diagnosis::flashError(uint8_t code) {
   if (code == 0) {
     err_code_ = 0;
     setMode(Mode::OFF);
@@ -49,10 +49,10 @@ void MonsterDiagnosis::flashError(uint8_t code) {
   mode_      = Mode::ERROR_CODE;
 }
 
-void MonsterDiagnosis::forceOn()  { setLed(true); }
-void MonsterDiagnosis::forceOff() { setLed(false); }
+void monster_diagnosis::forceOn()  { setLed(true); }
+void monster_diagnosis::forceOff() { setLed(false); }
 
-void MonsterDiagnosis::tick() {
+void monster_diagnosis::tick() {
   const uint32_t now = millis();
   switch (mode_) {
     case Mode::OFF:        break;
@@ -62,13 +62,13 @@ void MonsterDiagnosis::tick() {
   }
 }
 
-void MonsterDiagnosis::setLed(bool on) {
+void monster_diagnosis::setLed(bool on) {
   led_state_ = on;
   const bool phys = cfg_.active_high ? on : !on;
   digitalWrite(cfg_.led_pin, phys ? HIGH : LOW);
 }
 
-void MonsterDiagnosis::updateHeartbeat(uint32_t now) {
+void monster_diagnosis::updateHeartbeat(uint32_t now) {
   if (cfg_.heartbeat_ms == 0) return;
   if (now - hb_last_ >= cfg_.heartbeat_ms / 2) {
     hb_last_ = now;
@@ -76,7 +76,7 @@ void MonsterDiagnosis::updateHeartbeat(uint32_t now) {
   }
 }
 
-void MonsterDiagnosis::updateError(uint32_t now) {
+void monster_diagnosis::updateError(uint32_t now) {
   if (err_code_ == 0) { setLed(false); return; }
 
   switch (err_phase_) {

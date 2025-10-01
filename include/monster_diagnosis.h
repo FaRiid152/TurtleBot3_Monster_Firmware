@@ -13,7 +13,7 @@ struct MonsterDiagConfig {
   bool     active_high   = true;        // true=HIGH is ON, false=LOW is ON
 };
 
-class MonsterDiagnosis {
+class monster_diagnosis {
 public:
   enum class Mode : uint8_t {
     OFF,
@@ -22,7 +22,7 @@ public:
     ERROR_CODE
   };
 
-  MonsterDiagnosis() = default;
+  monster_diagnosis() = default;
 
   // Overloads instead of default argument
   bool init();                                   // uses default MonsterDiagConfig()

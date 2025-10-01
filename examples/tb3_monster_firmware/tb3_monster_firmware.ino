@@ -1,28 +1,12 @@
 /********************************************************************************************
- * Monster micro-ROS (OpenCR) — Minimal: /imu + /cmd_vel (sub & pub SAME TOPIC)
- * ------------------------------------------------------------------------------------------
- * SUBSCRIBE:
- *   - /cmd_vel    geometry_msgs/Twist   (linear.x, angular.z)  → updates motor controller
+ * Monster micro-ROS (OpenCR) — Minimal: /imu + /cmd_vel (RX-only) + /odom
+ * - SUBSCRIBE: /cmd_vel  geometry_msgs/Twist  → updates motor controller
+ * - PUBLISH:   /imu      sensor_msgs/Imu      @ 50 Hz
+ * - PUBLISH:   /odom     nav_msgs/Odometry    @ 50 Hz
  *
- * PUBLISH:
- *   - /imu        sensor_msgs/Imu       @ 50 Hz
- *   - /cmd_vel    geometry_msgs/Twist   @ 50 Hz (APPLIED command on SAME TOPIC)
- *       - If no cmd received within CMD_TIMEOUT_MS → publish zeros
- *       - When a new cmd arrives → controller updates immediately; periodic publisher
- *         will reflect it (same /cmd_vel topic)
- *
- * IMPORTANT:
- *   - Do NOT use Serial.print after micro-ROS transport is set (Serial is XRCE).
- *   - Ensure ROS_DOMAIN_ID matches host.
- *
- * HOST (two shells, same ROS_DOMAIN_ID):
- *   export ROS_DOMAIN_ID=35
- *   ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/serial/by-id/usb-ROBOTIS_OpenCR-if00 -v6
- *
- *   export ROS_DOMAIN_ID=35
- *   ros2 topic echo /imu
- *   ros2 topic echo /cmd_vel
- *   ros2 topic pub -r 10 /cmd_vel geometry_msgs/Twist "{linear: {x: 0.15}, angular: {z: 0.0}}"
+ * Notes:
+ *  - Keep streaming /cmd_vel faster than CMD_TIMEOUT_MS or increase the timeout.
+ *  - Do NOT use Serial.print after set_microros_transports() (Serial becomes XRCE).
  ********************************************************************************************/
 
 #include <Arduino.h>
@@ -35,9 +19,11 @@
 
 #include <geometry_msgs/msg/twist.h>
 #include <sensor_msgs/msg/imu.h>
+#include <nav_msgs/msg/odometry.h>
 
 #include <rosidl_runtime_c/string_functions.h>
 #include <rmw/qos_profiles.h>
+#include <math.h>
 
 using namespace MonsterCore;
 
@@ -45,8 +31,12 @@ using namespace MonsterCore;
 #define ROS_DOMAIN_ID_SET     35
 #define PUB_IMU_HZ            50
 #define PUB_CMD_HZ            50
-#define CMD_TIMEOUT_MS        500    // publish zeros if no cmd within this window
-static const char* FRAME_IMU = "imu_link";
+#define PUB_ODOM_HZ           50
+#define CMD_TIMEOUT_MS        500    // auto-stop if no /cmd_vel arrives within this window
+
+static const char* FRAME_IMU   = "imu_link";
+static const char* FRAME_ODOM  = "odom";
+static const char* FRAME_BASE  = "base_footprint";
 
 // ------------------------ micro-ROS handles ------------------- //
 static rcl_allocator_t        g_alloc;
@@ -56,13 +46,15 @@ static rcl_node_t             g_node;
 static rcl_subscription_t     sub_cmd_in;
 static geometry_msgs__msg__Twist msg_cmd_in;
 
-static rcl_publisher_t        pub_cmd_out;     // same topic: /cmd_vel
-static geometry_msgs__msg__Twist msg_cmd_out;
 static rcl_timer_t            tmr_cmd;
 
 static rcl_publisher_t        pub_imu;
 static sensor_msgs__msg__Imu  msg_imu;
 static rcl_timer_t            tmr_imu;
+
+static rcl_publisher_t        pub_odom;
+static nav_msgs__msg__Odometry msg_odom;
+static rcl_timer_t            tmr_odom;
 
 static rclc_executor_t        g_exec;
 
@@ -73,51 +65,55 @@ static uint32_t last_cmd_ms = 0;     // last time a cmd was received
 
 // ---------------------------- Helpers ------------------------- //
 static inline void zero_stamp(builtin_interfaces__msg__Time &t) { t.sec = 0; t.nanosec = 0; }
+
 static inline void set_cmd(float v, float w) {
   v_applied = v; w_applied = w;
   controller.setGoal(v_applied, w_applied);
   controller.update();               // push to motors immediately
 }
 
+static inline void yaw_to_quat(float yaw, float& qx, float& qy, float& qz, float& qw) {
+  const float h = 0.5f * yaw;
+  qx = 0.0f; qy = 0.0f;
+  qz = sinf(h);
+  qw = cosf(h);
+}
+
+// wheel→body twist using your odom sensor wheel rates (rad/s)
+static inline void compute_body_twist(float& v, float& w) {
+  const float wl = 0.5f * (sensors.wheelVelRad(0) + sensors.wheelVelRad(1));
+  const float wr = 0.5f * (sensors.wheelVelRad(2) + sensors.wheelVelRad(3));
+  v = WHEEL_RADIUS * 0.5f * (wl + wr);                 // m/s
+  w = WHEEL_RADIUS * (wr - wl) / WHEEL_SEPARATION;     // rad/s
+}
+
 // --------------------------- Callbacks ------------------------ //
-// Incoming /cmd_vel
+// Incoming /cmd_vel (subscriber)
 static void cb_cmd_in(const void* msg_in) {
   const auto* tw = static_cast<const geometry_msgs__msg__Twist*>(msg_in);
   last_cmd_ms = millis();
   set_cmd((float)tw->linear.x, (float)tw->angular.z);
 }
 
-// Periodic publisher for /cmd_vel (same topic) with watchdog
+// Periodic controller service + watchdog (NO publishing on /cmd_vel)
 static void cb_cmd_timer(rcl_timer_t*, int64_t) {
-  // Watchdog: if stale, force zeros
   const uint32_t now = millis();
   if (now - last_cmd_ms > CMD_TIMEOUT_MS) {
-    if (v_applied != 0.0f || w_applied != 0.0f) {
-      set_cmd(0.0f, 0.0f);
-    }
+    if (v_applied != 0.0f || w_applied != 0.0f) set_cmd(0.0f, 0.0f);
+  } else {
+    controller.update();
   }
-
-  // Publish the applied command on /cmd_vel
-  msg_cmd_out.linear.x  = v_applied;
-  msg_cmd_out.linear.y  = 0.0;
-  msg_cmd_out.linear.z  = 0.0;
-  msg_cmd_out.angular.x = 0.0;
-  msg_cmd_out.angular.y = 0.0;
-  msg_cmd_out.angular.z = w_applied;
-
-  rcl_publish(&pub_cmd_out, &msg_cmd_out, NULL);
 }
 
 // IMU publisher
 static void cb_imu_timer(rcl_timer_t*, int64_t) {
-  sensors.update();
+  sensors.update();  // updates IMU and keeps odometry integration fresh
 
   const float* q = sensors.quat();
   const float* g = sensors.gyro();
   const float* a = sensors.accel();
 
-  zero_stamp(msg_imu.header.stamp);
-  rosidl_runtime_c__String__assign(&msg_imu.header.frame_id, FRAME_IMU);
+  zero_stamp(msg_imu.header.stamp);  // SBC can stamp later
 
   msg_imu.orientation.x = q[0];
   msg_imu.orientation.y = q[1];
@@ -132,10 +128,45 @@ static void cb_imu_timer(rcl_timer_t*, int64_t) {
   msg_imu.linear_acceleration.y = a[1];
   msg_imu.linear_acceleration.z = a[2];
 
-  // Mark orientation unknown (let downstream fuse accel/gyro if needed)
-  msg_imu.orientation_covariance[0] = -1.0;
-
+  msg_imu.orientation_covariance[0] = -1.0;  // unknown orientation
   rcl_publish(&pub_imu, &msg_imu, NULL);
+}
+
+// ODOM publisher
+static void cb_odom_timer(rcl_timer_t*, int64_t) {
+  sensors.update();  // ensure encoders integrated frequently
+
+  // Pose
+  const float x  = sensors.odomX();
+  const float y  = sensors.odomY();
+  const float th = sensors.odomTheta();
+
+  // Twist
+  float v, w; compute_body_twist(v, w);
+
+  // Header
+  zero_stamp(msg_odom.header.stamp);
+
+  // Pose (x,y,theta)
+  msg_odom.pose.pose.position.x = x;
+  msg_odom.pose.pose.position.y = y;
+  msg_odom.pose.pose.position.z = 0.0f;
+
+  float qx,qy,qz,qw; yaw_to_quat(th, qx,qy,qz,qw);
+  msg_odom.pose.pose.orientation.x = qx;
+  msg_odom.pose.pose.orientation.y = qy;
+  msg_odom.pose.pose.orientation.z = qz;
+  msg_odom.pose.pose.orientation.w = qw;
+
+  // Twist (v,w)
+  msg_odom.twist.twist.linear.x  = v;
+  msg_odom.twist.twist.linear.y  = 0.0f;
+  msg_odom.twist.twist.linear.z  = 0.0f;
+  msg_odom.twist.twist.angular.x = 0.0f;
+  msg_odom.twist.twist.angular.y = 0.0f;
+  msg_odom.twist.twist.angular.z = w;
+
+  rcl_publish(&pub_odom, &msg_odom, NULL);
 }
 
 // ------------------------------- Setup ------------------------ //
@@ -151,7 +182,7 @@ void setup() {
   sensors.begin();
   sensors.calibrateGyro();
   diagnosis.init();
-  diagnosis.setMode(MonsterDiagnosis::Mode::HEARTBEAT);
+  diagnosis.setMode(monster_diagnosis::Mode::HEARTBEAT);
 
   // micro-ROS transport (works on your OpenCR)
   set_microros_transports();
@@ -166,10 +197,9 @@ void setup() {
   rcl_init_options_fini(&opts);
 
   // Node
-  if (rclc_node_init_default(&g_node, "tb3_min_imu_cmdvel_node", "", &g_support) != RCL_RET_OK) { return; }
+  if (rclc_node_init_default(&g_node, "tb3_min_imu_cmdvel_odom_rx_node", "", &g_support) != RCL_RET_OK) { return; }
 
-  // QoS
-  // Use RELIABLE so CLI tools and nav stacks match by default.
+  // QoS: RELIABLE so CLI tools and nav stacks match by default.
   rmw_qos_profile_t qos_rel = rmw_qos_profile_default;
   qos_rel.reliability = RMW_QOS_POLICY_RELIABILITY_RELIABLE;
   qos_rel.history     = RMW_QOS_POLICY_HISTORY_KEEP_LAST;
@@ -181,32 +211,56 @@ void setup() {
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
         "cmd_vel", &qos_rel) != RCL_RET_OK) { return; }
 
-  // Publisher: /cmd_vel (same topic, reliable)
-  if (rclc_publisher_init(
-        &pub_cmd_out, &g_node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-        "cmd_vel", &qos_rel) != RCL_RET_OK) { return; }
-
   // Publisher: /imu (reliable)
   if (rclc_publisher_init(
         &pub_imu, &g_node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu),
         "imu", &qos_rel) != RCL_RET_OK) { return; }
 
+  // Publisher: /odom (reliable)
+  if (rclc_publisher_init(
+        &pub_odom, &g_node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry),
+        "odom", &qos_rel) != RCL_RET_OK) { return; }
+
   // Timers
-  const uint64_t ns_cmd = (uint64_t)(1000000000ULL / PUB_CMD_HZ);
-  const uint64_t ns_imu = (uint64_t)(1000000000ULL / PUB_IMU_HZ);
+  const uint64_t ns_cmd  = (uint64_t)(1000000000ULL / PUB_CMD_HZ);
+  const uint64_t ns_imu  = (uint64_t)(1000000000ULL / PUB_IMU_HZ);
+  const uint64_t ns_odom = (uint64_t)(1000000000ULL / PUB_ODOM_HZ);
 
-  if (rclc_timer_init_default(&tmr_cmd, &g_support, ns_cmd, &cb_cmd_timer) != RCL_RET_OK) { return; }
-  if (rclc_timer_init_default(&tmr_imu, &g_support, ns_imu, &cb_imu_timer) != RCL_RET_OK) { return; }
+  if (rclc_timer_init_default(&tmr_cmd,  &g_support, ns_cmd,  &cb_cmd_timer)  != RCL_RET_OK) { return; }
+  if (rclc_timer_init_default(&tmr_imu,  &g_support, ns_imu,  &cb_imu_timer)  != RCL_RET_OK) { return; }
+  if (rclc_timer_init_default(&tmr_odom, &g_support, ns_odom, &cb_odom_timer) != RCL_RET_OK) { return; }
 
-  // Executor (1 sub + 2 timers = 3 → give headroom 5)
-  if (rclc_executor_init(&g_exec, &g_support.context, 5, &g_alloc) != RCL_RET_OK) { return; }
+  // Executor (1 sub + 3 timers)
+  if (rclc_executor_init(&g_exec, &g_support.context, 6, &g_alloc) != RCL_RET_OK) { return; }
   if (rclc_executor_add_subscription(&g_exec, &sub_cmd_in, &msg_cmd_in, &cb_cmd_in, ON_NEW_DATA) != RCL_RET_OK) { return; }
-  if (rclc_executor_add_timer(&g_exec, &tmr_cmd) != RCL_RET_OK) { return; }
-  if (rclc_executor_add_timer(&g_exec, &tmr_imu) != RCL_RET_OK) { return; }
+  if (rclc_executor_add_timer(&g_exec, &tmr_cmd)  != RCL_RET_OK) { return; }
+  if (rclc_executor_add_timer(&g_exec, &tmr_imu)  != RCL_RET_OK) { return; }
+  if (rclc_executor_add_timer(&g_exec, &tmr_odom) != RCL_RET_OK) { return; }
 
-  // Initialize applied cmd to zeros and “pretend” a recent command so we publish immediately
+  // Static fields once (avoid per-tick allocations)
+  rosidl_runtime_c__String__assign(&msg_imu.header.frame_id,  FRAME_IMU);
+  rosidl_runtime_c__String__assign(&msg_odom.header.frame_id, FRAME_ODOM);
+  rosidl_runtime_c__String__assign(&msg_odom.child_frame_id,  FRAME_BASE);
+
+  // Covariances (TB3-style)
+  for (int i=0;i<36;i++) { msg_odom.pose.covariance[i]=0.0; msg_odom.twist.covariance[i]=0.0; }
+  msg_odom.pose.covariance[0]  = 1e-3;   // x
+  msg_odom.pose.covariance[7]  = 1e-3;   // y
+  msg_odom.pose.covariance[14] = 1e6;    // z
+  msg_odom.pose.covariance[21] = 1e6;    // roll
+  msg_odom.pose.covariance[28] = 1e6;    // pitch
+  msg_odom.pose.covariance[35] = 1e-3;   // yaw
+
+  msg_odom.twist.covariance[0]  = 1e-3;  // vx
+  msg_odom.twist.covariance[7]  = 1e-3;  // vy
+  msg_odom.twist.covariance[14] = 1e6;   // vz
+  msg_odom.twist.covariance[21] = 1e6;   // wx
+  msg_odom.twist.covariance[28] = 1e6;   // wy
+  msg_odom.twist.covariance[35] = 1e-3;  // wz
+
+  // Seed zeros so robot is idle until first /cmd_vel
   last_cmd_ms = millis();
   set_cmd(0.0f, 0.0f);
 }

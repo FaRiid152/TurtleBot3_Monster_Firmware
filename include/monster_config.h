@@ -3,6 +3,8 @@
 
 #include <stdint.h>  // for int32_t
 
+#define MONSTER_EXT_SENSORS 0   // 0 = no OLLO/sonar hardware present
+
 // Robot geometry
 #define WHEEL_RADIUS        0.033f
 #define WHEEL_SEPARATION    0.160f
@@ -31,8 +33,16 @@
 #define SIGN_R1  (+1)
 #define SIGN_R2  (-1)
 
+// Global timing
+#define CONTROL_PERIOD                  8000
+
+// DEG2RAD/RAD2DEG conversion:
+static inline float deg2rad(float x){ return x * 0.01745329252f; }
+static inline float rad2deg(float x){ return x * 57.2957795131f; }
+
+
 // Helpers in a namespace to avoid clashes
-namespace monster {
+namespace monster_config {
 
 // m/s -> Dynamixel Goal Velocity units
 static inline int32_t mpsToGoalU(float mps) {
@@ -50,6 +60,6 @@ static inline float goalUToMps(int32_t u) {
   return rpm * (2.0f * 3.14159265359f * WHEEL_RADIUS) / 60.0f;
 }
 
-} // namespace monster
+} // namespace monster_config
 
 #endif

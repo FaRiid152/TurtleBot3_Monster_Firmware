@@ -138,19 +138,44 @@ void monster_sensor::updateOdometry() {
     */
 
   // Differential-drive body increment using side averages
-  const float dphi_L = 0.5f * (dphi_L1 + dphi_L2);
-  const float dphi_R = 0.5f * (dphi_R1 + dphi_R2);
+  // Robust averaging for each side (reject slip/outliers)
+  auto robust_avg = [](float a, float b) {
+    const float diff = fabsf(a - b);
+    const float mag  = fmaxf(fabsf(a), fabsf(b)) + 1e-6f;
+    if (diff > 0.25f * mag) {                 // wheels on a side disagree a lot → slip
+      return (fabsf(a) < fabsf(b)) ? a : b;   // trust the smaller magnitude
+    }
+    return 0.5f * (a + b);
+  };
 
-  const float sL = WHEEL_RADIUS * dphi_L;
-  const float sR = WHEEL_RADIUS * dphi_R;
+  const float dphiL = robust_avg(dphi_L1, dphi_L2);
+  const float dphiR = robust_avg(dphi_R1, dphi_R2);
+
+  // Per-side distance with optional scale
+  const float sL = (WHEEL_RADIUS * ODOM_SCALE_L) * dphiL;
+  const float sR = (WHEEL_RADIUS * ODOM_SCALE_R) * dphiR;
+
+  // Use EFFECTIVE track (skid-steer correction)
+  const float L_eff = WHEEL_SEPARATION * ODOM_TRACK_SCALE;
 
   const float ds  = 0.5f * (sL + sR);
-  const float dth = (sR - sL) / WHEEL_SEPARATION;
+  float dth       = (sR - sL) / L_eff;
 
-  const float th_mid = odom_th_ + 0.5f * dth;
-  odom_x_  += ds * cosf(th_mid);
-  odom_y_  += ds * sinf(th_mid);
-  odom_th_  = normalizeAngle(odom_th_ + dth);
+  // Kill random yaw on straight segments
+  const float bal = fabsf(sR - sL) / (fabsf(sR) + fabsf(sL) + 1e-6f);
+  if (bal < 0.01f && fabsf(dth) < 1e-3f) dth = 0.0f;
+
+  // Exact SE(2) arc update (reduces bias vs. midpoint)
+  const float th0 = odom_th_;
+  if (fabsf(dth) < 1e-9f) {
+    odom_x_ += ds * cosf(th0);
+    odom_y_ += ds * sinf(th0);
+  } else {
+    const float r = ds / dth;
+    odom_x_ += r * (sinf(th0 + dth) - sinf(th0));
+    odom_y_ += -r * (cosf(th0 + dth) - cosf(th0));
+  }
+  odom_th_ = normalizeAngle(th0 + dth);
 }
 
 /* ---------------- IMU ---------------- */

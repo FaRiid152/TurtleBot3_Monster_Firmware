@@ -7,7 +7,7 @@
 
 // Robot geometry
 #define WHEEL_RADIUS        0.033f
-#define WHEEL_SEPARATION    0.160f
+#define WHEEL_SEPARATION    0.320f
 
 #ifndef ODOM_SCALE_L
 #define ODOM_SCALE_L 1.000f
@@ -15,9 +15,7 @@
 #ifndef ODOM_SCALE_R
 #define ODOM_SCALE_R 1.004f
 #endif   
-#ifndef ODOM_TRACK_SCALE
-#define ODOM_TRACK_SCALE 2.000f // effective track multiplier (tune from in-place spin)
-#endif
+
 
 // Velocity limits
 #define MAX_LINEAR_VELOCITY   (WHEEL_RADIUS * 2.0f * 3.14159265359f * 61.0f / 60.0f)

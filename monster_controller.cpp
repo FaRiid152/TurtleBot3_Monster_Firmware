@@ -47,10 +47,10 @@ bool monster_controller::update() {
   last_us = now;
 
   // Hysteresis + pulse spec (locals; no new macros)
-  const float W_ENTER = deg2rad(20.0f);      // enter spin if |ω| ≥ 5°/s
-  const float W_EXIT  = deg2rad(3.0f);      // exit spin when |ω| ≤ 1°/s
-  const float PULSE_PERIOD = 1.0f;          // seconds
-  const float PULSE_ANGLE  = deg2rad(1.0f); // 1° per pulse
+  const float W_ENTER = deg2rad(15.0f);      // enter spin if |ω| ≥ 3°/s
+  const float W_EXIT  = deg2rad(5.0f);      // exit spin when |ω| ≤ 1°/s
+  const float PULSE_PERIOD = 0.05f;          // seconds
+  const float PULSE_ANGLE  = deg2rad(5.0f); // 1° per pulse
   float w_pulse = PULSE_ANGLE / PULSE_PERIOD;
 
   // physical ω limit from wheel rail
